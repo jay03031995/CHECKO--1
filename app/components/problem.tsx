@@ -3,66 +3,161 @@
 import { useEffect, useRef, useState } from 'react';
 
 /*
- * Section 2 · The problem — four figures in one clean row.
- * Amounts first, then percentages; every amount in US dollars. Each number counts up once when the row comes into view.
+ * Section 2 · The problem — "Running total, with dives" (chosen concept), with the copy cut back:
+ * each row is a number and a few words; the context, chart and source live inside the dive.
+ * The counter is the yearly figure spread per second (an estimate, labelled as such), counted since the page opened.
  */
 
-type Stat = { to: number; dec: number; pre: string; suf: string; label: string; src: string };
-const STATS: Stat[] = [
-  { to: 467, dec: 0, pre: '$', suf: 'bn', label: 'in fake goods traded worldwide every year', src: 'OECD & EUIPO, Mapping Global Trade in Fakes 2025 (2021 data)' },
-  { to: 8.3, dec: 1, pre: '$', suf: 'bn', label: 'in tax India lost to illicit trade in one year', src: 'FICCI CASCADE, Illicit Markets 2022: ₹58,521 crore in 2019–20, at that year’s average of about ₹70.9 per US$' },
-  { to: 89, dec: 0, pre: '', suf: '%', label: 'of urban Indians have bought a fake at least once', src: 'ASPA & CRISIL, State of Counterfeiting in India 2025' },
-  { to: 10, dec: 0, pre: '', suf: '%', label: 'of medical products in low- and middle-income countries are substandard or falsified', src: 'WHO, 2017' },
+const YEAR = 365 * 24 * 3600;
+const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+
+// every amount in US dollars; India's tax loss is FICCI's ₹58,521 crore (2019–20) at that year's average of about ₹70.9 per US$
+type Feed = 'global' | 'tax';
+const FEEDS: Record<Feed, { rate: number; fmt: Intl.NumberFormat; label: string; per: string }> = {
+  global: { rate: 467e9 / YEAR, fmt: usd, label: 'Fakes traded worldwide since you opened this page', per: '≈ $14,800 every second' },
+  tax: { rate: 8.3e9 / YEAR, fmt: usd, label: 'Tax India lost since you opened this page', per: '≈ $260 every second' },
+};
+
+// amounts first, then percentages
+type Viz = 'share' | 'people' | 'tax';
+const ROWS: { big: string; title: string; line: string; viz: Viz; feed: Feed; src: string }[] = [
+  { big: '$467bn', title: 'in fake goods traded every year', line: 'Up to 2.3% of all world imports. Every copy is a sale the real brand never makes.', viz: 'share', feed: 'global', src: 'OECD & EUIPO, Mapping Global Trade in Fakes 2025 (2021 data)' },
+  { big: '$8.3bn', title: 'in tax lost in a single year', line: 'India, just five industries, one year.', viz: 'tax', feed: 'tax', src: 'FICCI CASCADE, Illicit Markets, 2022 (2019–20 data): ₹58,521 crore at about ₹70.9 per US$' },
+  { big: '89%', title: 'of urban Indians have bought a fake', line: 'A good copy looks exactly like the real thing.', viz: 'people', feed: 'global', src: 'ASPA & CRISIL, State of Counterfeiting in India 2025 (1,639 consumers, 9 cities)' },
 ];
 
-function Count({ s, run }: { s: Stat; run: boolean }) {
-  const [v, setV] = useState(s.to);
+function Chart({ viz, on }: { viz: Viz; on: boolean }) {
+  if (viz === 'share') {
+    const pct = 2.3;
+    return (
+      <div className="pv-share">
+        <div className="pv-bar"><i style={{ width: on ? `${pct}%` : 0 }} /></div>
+        <div className="pv-legend">
+          <span><b className="char" />Fakes, 2.3%</span>
+          <span><b />All other world trade</span>
+        </div>
+      </div>
+    );
+  }
+  if (viz === 'people') {
+    return (
+      <div className="pv-people">
+        <div className="pv-ppl" role="img" aria-label="89 out of 100 people highlighted">
+          {Array.from({ length: 100 }, (_, k) => <i key={k} className={on && k < 89 ? 'on' : ''} style={{ transitionDelay: `${k * 14}ms` }} />)}
+        </div>
+        <span className="pv-cap">89 in every 100</span>
+      </div>
+    );
+  }
+  return (
+    <div className="pv-pair">
+      <div><strong>$8.3bn</strong><span>tax lost in 2019–20</span></div>
+      <div><strong>5</strong><span>industries studied</span></div>
+    </div>
+  );
+}
+
+// "$467bn", "$8.3bn", "89%": counts from 0 the first time the section comes into view
+function CountUp({ value, run }: { value: string; run: boolean }) {
+  const m = value.match(/^([^\d]*)([\d,]+)(.*)$/);
+  const ref = useRef<HTMLSpanElement>(null);
   useEffect(() => {
-    if (!run || matchMedia('(prefers-reduced-motion: reduce)').matches) { setV(s.to); return; }
-    let raf = 0; const t0 = performance.now();
-    const tick = (now: number) => {
-      const p = Math.min(1, (now - t0) / 1400), e = 1 - Math.pow(1 - p, 3);
-      setV(s.to * e);
-      if (p < 1) raf = requestAnimationFrame(tick);
+    if (!m || !run || !ref.current || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const [, pre, num, post] = m, to = Number(num.replace(/,/g, '')), fmt = new Intl.NumberFormat('en-US');
+    const el = ref.current, start = performance.now(), dur = 1400;
+    let raf = 0;
+    const step = (now: number) => {
+      const u = Math.min(1, (now - start) / dur), e = 1 - Math.pow(1 - u, 3);
+      el.textContent = pre + fmt.format(Math.round(to * e)) + post;
+      if (u < 1) raf = requestAnimationFrame(step);
     };
-    raf = requestAnimationFrame(tick);
+    raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
-  }, [run, s.to]);
-  return <>{s.pre}{v.toFixed(s.dec)}{s.suf}</>;
+  }, [run]); // eslint-disable-line react-hooks/exhaustive-deps
+  return <span ref={ref} className="acc-big">{value}</span>;
 }
 
 export default function Problem() {
-  const row = useRef<HTMLUListElement>(null);
-  const [run, setRun] = useState(false);
+  const [open, setOpen] = useState(0);
+  const [seen, setSeen] = useState(false);
+  const [all, setAll] = useState(false);
+  const [feed, setFeed] = useState<Feed>('global');
+  const [swapping, setSwapping] = useState(false);
+  const num = useRef<HTMLSpanElement>(null);
+  const bar = useRef<HTMLElement>(null);
+  const root = useRef<HTMLElement>(null);
+  const feedRef = useRef<Feed>('global');
+
+  // the running total: written straight to the DOM, and only while the section is on screen
   useEffect(() => {
-    const el = row.current;
-    if (!el || !('IntersectionObserver' in window)) return;
-    const io = new IntersectionObserver(([e]) => { if (e.isIntersecting) { setRun(true); io.disconnect(); } }, { threshold: 0.35 });
-    io.observe(el);
-    return () => io.disconnect();
+    const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let raf = 0, visible = false, shown = '';
+    const tick = () => {
+      const t = reduced ? 60 : performance.now() / 1000;
+      const F = FEEDS[feedRef.current], s = F.fmt.format(Math.floor(F.rate * t));
+      if (num.current && s !== shown) { shown = s; num.current.textContent = s; }
+      if (bar.current) bar.current.style.width = reduced ? '100%' : `${(t % 1) * 100}%`;
+      if (visible && !reduced) raf = requestAnimationFrame(tick);
+    };
+    const io = new IntersectionObserver(([e]) => { visible = e.isIntersecting; if (visible) setSeen(true); cancelAnimationFrame(raf); if (visible) raf = requestAnimationFrame(tick); else tick(); });
+    if (root.current) io.observe(root.current);
+    tick();
+    return () => { io.disconnect(); cancelAnimationFrame(raf); };
   }, []);
 
+  function toggle(k: number) {
+    const next = open === k ? -1 : k;
+    setOpen(next);
+    const f = next < 0 ? 'global' : ROWS[next].feed;
+    if (f === feedRef.current) return;
+    // fade the counter out, retune it, fade back in
+    setSwapping(true);
+    window.setTimeout(() => { feedRef.current = f; setFeed(f); setSwapping(false); }, 240);
+  }
+
   return (
-    <section id="problem" className="problem2" aria-labelledby="problem-title">
-      <div className="p2-head" data-rv>
-        <div>
-          <span className="kicker">The problem</span>
+    <section ref={root} id="problem" className="problem" aria-labelledby="problem-title">
+      <div className="problem-inner" data-rv>
+        <div className="problem-left">
+          <span className="problem-pill">The problem</span>
           <h2 id="problem-title">Counterfeiting costs <span className="hl">everyone.</span></h2>
+          <p className="problem-sub">Every one of these starts with a fake nobody could tell apart.</p>
+          <div className={`ticker${swapping ? ' swap' : ''}`} aria-live="off">
+            <span className="ticker-lab">{FEEDS[feed].label}</span>
+            <span ref={num} className="ticker-num">$0</span>
+            <span className="ticker-rate">{FEEDS[feed].per}<i><b ref={bar} /></i></span>
+          </div>
+          <a className="problem-cta" href="#solutions">See how Checko stops it <span aria-hidden="true">→</span></a>
         </div>
-        <div className="p2-side">
-          <p>A good copy looks exactly like the real thing. Brands lose the sale, governments lose the tax, and buyers take the risk.</p>
-          <a className="p2-cta" href="#solutions">See how Checko stops it <span aria-hidden="true">→</span></a>
+
+        <div className="problem-right">
+          <span className="problem-kicker">Three ways it hurts</span>
+          <ul className={`acc${all ? ' all' : ''}`} data-rv-stagger>
+            {ROWS.map((r, k) => {
+              const on = open === k;
+              return (
+                <li key={r.big} className={`acc-row${on ? ' open' : ''}`}>
+                  <button type="button" aria-expanded={on} aria-controls={`dive-${k}`} onClick={() => toggle(k)}>
+                    <CountUp value={r.big} run={seen} />
+                    <span className="acc-title">{r.title}</span>
+                    <span className="acc-pm" aria-hidden="true" />
+                  </button>
+                  <div className="acc-dive" id={`dive-${k}`} role="region" aria-label={r.title}>
+                    <div>
+                      <div className="acc-in">
+                        <p>{r.line}</p>
+                        <div className="acc-card"><Chart viz={r.viz} on={on && seen} /></div>
+                        <cite>{r.src}</cite>
+                      </div>
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+          {!all && ROWS.length > 3 && <button type="button" className="acc-more" onClick={() => setAll(true)}>Show all</button>}
         </div>
       </div>
-      <ul ref={row} className="p2-row">
-        {STATS.map((s, i) => (
-          <li key={s.label} className={s.suf === '%' ? 'pct' : 'amt'} style={{ '--i': i } as React.CSSProperties}>
-            <strong aria-label={`${s.pre}${s.to}${s.suf}`}><Count s={s} run={run} /></strong>
-            <span>{s.label}</span>
-          </li>
-        ))}
-      </ul>
-      <p className="p2-src">Sources: {STATS.map(s => s.src).join(' · ')}.</p>
     </section>
   );
 }
