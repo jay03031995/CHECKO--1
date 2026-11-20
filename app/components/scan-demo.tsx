@@ -30,7 +30,10 @@ export default function ScanDemo() {
   const [inView, setInView] = useState(true);
   const [index, setIndex] = useState(0);
   const [phase, setPhase] = useState(0);
-  const running = introDone && inView && !reduced;
+  const [paused, setPaused] = useState(false);
+  const running = introDone && inView && !reduced && !paused;
+  // the controller: jump to a product (starts its scan from the beginning)
+  const goTo = (i: number) => { const n = products.length; setIndex(((i % n) + n) % n); setPhase(0); };
 
   // only animate while the demo is on screen
   useEffect(() => {
@@ -56,14 +59,16 @@ export default function ScanDemo() {
   const lastIndex = useRef(index);
   useEffect(() => {
     if (lastIndex.current === index) return;
-    const n = products.length, gone = (lastIndex.current + n - 1) % n;
+    const n = products.length, forward = index === (lastIndex.current + 1) % n, gone = (lastIndex.current + n - 1) % n;
     lastIndex.current = index;
+    if (!forward) { setExiting(null); return; }
     setExiting(gone);
     const t = window.setTimeout(() => setExiting(null), 950);
     return () => clearTimeout(t);
   }, [index]);
   // on the very render where the index moves, the leaving product is already marked (no one-frame jump)
-  const exitNow = lastIndex.current !== index ? (lastIndex.current + products.length - 1) % products.length : exiting;
+  const stepped = lastIndex.current !== index && index === (lastIndex.current + 1) % products.length;
+  const exitNow = stepped ? (lastIndex.current + products.length - 1) % products.length : lastIndex.current !== index ? null : exiting;
   const verified = reduced || phase >= 3;
   const scanning = phase === 2 && !reduced;
 
@@ -136,6 +141,24 @@ export default function ScanDemo() {
             </div>
           </div>
         </div>
+      </div>
+      <div className="hero-ctrl" role="group" aria-label="Product slider">
+        <button type="button" className="hc-arrow" aria-label="Previous product" onClick={() => goTo(index - 1)}>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6" /></svg>
+        </button>
+        <div className="hc-dots">
+          {products.map((p, i) => (
+            <button key={p.id} type="button" className={i === index ? 'on' : ''} aria-label={`Show ${p.name}`} aria-current={i === index} onClick={() => goTo(i)}>
+              {i === index && running && <i key={index} className="hc-fill" />}
+            </button>
+          ))}
+        </div>
+        <button type="button" className="hc-arrow" aria-label={paused ? 'Play the slider' : 'Pause the slider'} aria-pressed={paused} onClick={() => setPaused(v => !v)}>
+          {paused ? <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5l11 7-11 7z" /></svg> : <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6v12M15 6v12" /></svg>}
+        </button>
+        <button type="button" className="hc-arrow" aria-label="Next product" onClick={() => goTo(index + 1)}>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+        </button>
       </div>
     </LazyMotion>
   );
