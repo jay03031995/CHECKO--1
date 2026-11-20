@@ -4,7 +4,7 @@ The previous version stays untouched in the parent folder and runs at http://loc
 Double-click `start-v2-localhost-3001.command` to run this one.
 
 ## What is different from version 1
-- **Intro:** the wordmark now develops out of ink. Drops land, spread and overlap (darker where they meet), then settle into the crisp checko logo. No dots.
+- **Intro:** the same loader as version 1 (dots gather into the wordmark, develop into ink, tagline, doors open).
 - **Hero slider:** unbranded products from the Industries set (engine oil, cable and switch, brake disc, tablets), each wearing a Checko-style label. The phone camera shows that label close up.
 - **Colours:** black and white lead. Gold #C9962B is the single accent (replaces honey/apricot). Checko Green #4EAB47 is only for "verified". Maroon #7A1F35 is for risk and suspect states. Ivory #F7F5F0 and Sand #F3EAD6 are the warm neutrals.
 - **Solutions:** the branded Havells box is replaced by an unbranded cable-and-switch product. "What is the market telling you?" now shows a live chart that draws itself, plus region bars with one flagged region (it replaces the dot grid).

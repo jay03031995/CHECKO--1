@@ -1,30 +1,31 @@
 /*
- * Checko intro (v2): the wordmark develops out of ink.
+ * Checko intro.
  *
- * 0. Drops of ink fall onto white paper all over the screen ("tup, tup, tup…") and each one spreads into a blot.
- * 1. The blots rush together into the word ("zoom") and land inside the letters.
- * 2. Each landed drop spreads with a ragged, wet edge. Where two drops meet the ink overlaps and darkens,
- *    the way ink does on paper. Inside the letters it soaks in fully; outside, only a faint bleed.
- * 3. The ink settles into the crisp checko wordmark (tick in green).
- * 4. "The fingerprint of things." is inked in underneath, left to right.
+ * 1. Black specks drift across the screen (the ink in the air).
+ * 2. Some of them fly together into the checko wordmark.
+ * 3. The dots develop into ink: they spread and run together, then settle into the crisp wordmark (tick in green).
+ * 4. "The fingerprint of things." gathers underneath.
  * 5. The finished frame is handed to the page, which opens it like a pair of doors (intro-loader.tsx).
  *
- * Everything is a 2D canvas: one precomputed "arrival time" field per pixel, shaded each frame.
+ * Dots: 2D canvas. Ink: a small WebGL canvas over the wordmark that renders the merged ink.
+ * Without WebGL the dots simply stay dots.
  */
+
+const TAU = Math.PI * 2;
 
 /* Timeline in seconds. */
 export const T = {
-  rain: [0.25, 1.75],     // drops fall all over the screen and spread into blots
-  fly: [1.75, 2.55],      // the blots rush into the word
-  ink: [2.3, 3.6],        // inside the letters the ink spreads (each drop starts when its blot lands)
-  settle: [3.45, 4.0],    // the ink settles into the crisp wordmark
-  tagline: [3.85, 4.85],  // the tagline is inked in
-  open: 5.6,              // hand over to the doors
+  gather: [0.5, 2.2],     // dots fly into the wordmark (staggered)
+  develop: [2.15, 3.2],   // dots spread and run together into solid ink
+  tagline: [3.2, 4.3],    // the tagline gathers underneath, then turns crisp
+  open: 5.1,              // hand over to the doors
 };
-const TAU = Math.PI * 2;
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const smooth = (a, b, t) => { t = clamp((t - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+const easeOut = t => 1 - Math.pow(1 - t, 3);
+const easeInOut = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+const mix = (a, b, t) => a + (b - a) * t;
 
 function fit(cv) {
   const r = cv.getBoundingClientRect(), d = Math.min(window.devicePixelRatio || 1, 3);
@@ -33,171 +34,180 @@ function fit(cv) {
   return { w: r.width, h: r.height, d };
 }
 
-// small value noise for ragged ink edges
-function noise2(seed) {
-  const N = 256, v = new Float32Array(N * N);
-  let s = seed >>> 0;
-  for (let i = 0; i < v.length; i++) { s = (s * 1664525 + 1013904223) >>> 0; v[i] = s / 4294967296; }
-  const f = t => t * t * (3 - 2 * t);
-  return (x, y) => {
-    const xi = Math.floor(x), yi = Math.floor(y), xf = f(x - xi), yf = f(y - yi);
-    const i0 = (xi & 255), j0 = (yi & 255), i1 = (i0 + 1) & 255, j1 = (j0 + 1) & 255;
-    const a = v[j0 * N + i0], b = v[j0 * N + i1], c = v[j1 * N + i0], d = v[j1 * N + i1];
-    return a + (b - a) * xf + (c - a) * yf + (a - b - c + d) * xf * yf;
+// sample a mask into dot positions on a hexagonal grid, centred on (0,0)
+function sample(draw, W, H, sp, test) {
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const x = c.getContext('2d', { willReadFrequently: true });
+  draw(x);
+  const px = x.getImageData(0, 0, W, H).data, pts = [];
+  let row = 0;
+  for (let y = sp / 2; y < H; y += sp * .866, row++) {
+    for (let xx = (row % 2 ? sp / 2 : 0) + sp / 4; xx < W; xx += sp) {
+      const jx = xx + (Math.random() - .5) * .35 * sp, jy = y + (Math.random() - .5) * .35 * sp;
+      const i = (Math.round(jy) * W + Math.round(jx)) * 4;
+      const kind = test(px[i], px[i + 1], px[i + 2], px[i + 3]);
+      if (kind) pts.push({ x: jx - W / 2, y: jy - H / 2, g: kind === 2 });
+    }
+  }
+  return pts;
+}
+
+/* ---------- the ink: a height field lit as a raised, glossy surface ---------- */
+// red channel = black ink, green channel = the green tick; both add up into one surface
+function inkGL(cv) {
+  const gl = cv.getContext('webgl', { premultipliedAlpha: false, preserveDrawingBuffer: true, antialias: false, alpha: true });
+  if (!gl) return null;
+  const vs = 'attribute vec2 p;varying vec2 v;void main(){v=p*.5+.5;gl_Position=vec4(p,0.,1.);}';
+  const fs = `precision mediump float;varying vec2 v;uniform sampler2D F;uniform vec2 T;uniform float thr,relief;uniform vec3 L;uniform vec2 tilt;
+  float fh(vec2 p){vec4 c=texture2D(F,p);return c.r+c.g;}
+  float ht(vec2 p){return smoothstep(thr,.95,fh(p));}
+  void main(){
+    vec2 uv=v-tilt*ht(v)*.03*relief;
+    vec4 c=texture2D(F,uv);
+    float f=c.r+c.g;
+    float cov=smoothstep(thr-.025,thr+.025,f);
+    float hx=ht(uv+vec2(T.x,0.))-ht(uv-vec2(T.x,0.)),hy=ht(uv+vec2(0.,T.y))-ht(uv-vec2(0.,T.y));
+    vec3 n=normalize(vec3(-hx*4.2*relief,-hy*4.2*relief,1.));
+    vec3 l=normalize(L),hv=normalize(l+vec3(0.,0.,1.));
+    float nh=max(dot(n,hv),0.);
+    float spec=pow(nh,48.)*.75+pow(nh,8.)*.08;
+    float gr=clamp(c.g/max(f,.001),0.,1.);
+    vec3 base=mix(vec3(.03,.034,.038),vec3(.2,.6,.19),gr);
+    vec3 ink=base+vec3((1.-n.z)*.1)+vec3(spec);
+    ink=mix(mix(vec3(.102,.114,.122),vec3(.306,.671,.278),gr),ink,relief);
+    float sh=ht(uv+l.xy*T*9.)*(1.-cov)*.3*relief;
+    gl_FragColor=vec4(ink*cov,max(cov,sh*.7));
+  }`;
+  const sh = (t, src) => { const o = gl.createShader(t); gl.shaderSource(o, src); gl.compileShader(o); return o; };
+  const pr = gl.createProgram(); gl.attachShader(pr, sh(gl.VERTEX_SHADER, vs)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, fs)); gl.linkProgram(pr);
+  if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) return null;
+  gl.useProgram(pr);
+  const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+  const loc = gl.getAttribLocation(pr, 'p'); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+  const tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+  [gl.TEXTURE_MIN_FILTER, gl.TEXTURE_MAG_FILTER].forEach(k => gl.texParameteri(gl.TEXTURE_2D, k, gl.LINEAR));
+  [gl.TEXTURE_WRAP_S, gl.TEXTURE_WRAP_T].forEach(k => gl.texParameteri(gl.TEXTURE_2D, k, gl.CLAMP_TO_EDGE));
+  gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+  const u = n => gl.getUniformLocation(pr, n), uT = u('T'), uThr = u('thr'), uRel = u('relief'), uL = u('L'), uTilt = u('tilt');
+  return {
+    draw(field, upload, o) {
+      gl.viewport(0, 0, cv.width, cv.height);
+      gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+      if (upload) gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, field);
+      gl.uniform2f(uT, 1.4 / field.width, 1.4 / field.height); gl.uniform1f(uThr, .32); gl.uniform1f(uRel, o.relief);
+      gl.uniform3f(uL, o.L[0], o.L[1], o.L[2]); gl.uniform2f(uTilt, o.tilt[0], o.tilt[1]);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    },
+    release() { const x = gl.getExtension('WEBGL_lose_context'); if (x) x.loseContext(); },
   };
+}
+
+// one soft blob, pre-rendered per channel; drawn scaled with "lighter" so overlapping blobs add up into liquid
+const STOPS = [[0, 158], [.2, 139], [.4, 97], [.6, 51], [.8, 21], [1, 0]];
+function blobSprite(channel) {
+  const S = 128, c = document.createElement('canvas'); c.width = c.height = S;
+  const x = c.getContext('2d'), g = x.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+  STOPS.forEach(([o, v]) => g.addColorStop(o, channel === 'g' ? `rgb(0,${v},0)` : `rgb(${v},0,0)`));
+  x.fillStyle = g; x.fillRect(0, 0, S, S);
+  return c;
 }
 
 /**
  * @param {{canvas: HTMLCanvasElement, logo: HTMLImageElement, font: string,
- *          onReady: (frame: HTMLCanvasElement) => void, sound?: any}} o
+ *          onReady: (frame: HTMLCanvasElement) => void}} o
  * @returns {{destroy: () => void, skip: () => void}}
  */
-export function startInkIntro({ canvas, logo, font, onReady, sound }) {
+export function startInkIntro({ canvas, logo, font, onReady }) {
   const ctx = canvas.getContext('2d');
+  const host = canvas.parentElement;
   const debug = /intro=debug/.test(location.search);
   let { w, h } = fit(canvas);
-  let raf = 0, last = performance.now(), clock = 0, dead = false, handed = false, skipAt = -1, zoomed = false, settled = false;
+  let raf = 0, last = performance.now(), clock = 0, dead = false, handed = false, skipAt = -1;
   const narrow = w < 640;
 
-  /* ---------- the wordmark and its ink field ---------- */
+  /* ---------- the wordmark ---------- */
   const LW = Math.round(narrow ? Math.min(w * .8, 360) : Math.min(600, w * .5)), LH = Math.round(LW * logo.naturalHeight / logo.naturalWidth);
-  const PAD = Math.round(LW * .09);
-  // field resolution: fine enough for a sharp wet edge, light enough to shade every frame
-  const FS = narrow ? 1.5 : 1.25;
-  const FW = Math.round((LW + PAD * 2) * FS), FH = Math.round((LH + PAD * 2) * FS);
-  const mc = document.createElement('canvas'); mc.width = FW; mc.height = FH;
-  const mx = mc.getContext('2d', { willReadFrequently: true });
-  mx.drawImage(logo, PAD * FS, PAD * FS, LW * FS, LH * FS);
-  const src = mx.getImageData(0, 0, FW, FH).data;
-  const n = FW * FH;
-  const ink = new Float32Array(n), green = new Uint8Array(n);
-  for (let i = 0; i < n; i++) {
-    const r = src[i * 4], g = src[i * 4 + 1], b = src[i * 4 + 2], a = src[i * 4 + 3] / 255;
-    ink[i] = a;
-    if (a > .2 && g > r + 40) green[i] = 1;
-  }
-  // blurred copy of the mask: the faint bleed outside the letters follows the letters
-  mx.clearRect(0, 0, FW, FH); mx.filter = `blur(${(LW * .018 * FS).toFixed(1)}px)`;
-  mx.drawImage(logo, PAD * FS, PAD * FS, LW * FS, LH * FS); mx.filter = 'none';
-  const near = mx.getImageData(0, 0, FW, FH).data;
-
-  // the drops: seeded inside the letters, landing roughly left to right, the tick last
-  const inside = [];
-  for (let y = 0; y < FH; y += 3) for (let x = 0; x < FW; x += 3) { const i = y * FW + x; if (ink[i] > .6 && !green[i]) inside.push([x, y]); }
-  const tickPts = [];
-  for (let y = 0; y < FH; y += 3) for (let x = 0; x < FW; x += 3) { const i = y * FW + x; if (green[i] && ink[i] > .6) tickPts.push([x, y]); }
-  const DROPS = narrow ? 13 : 17;
-  const drops = [];
-  for (let k = 0; k < DROPS; k++) {
-    // stratify along x so every part of the word gets ink
-    const lo = k / DROPS, hi = (k + 1) / DROPS;
-    const pool = inside.filter(([x]) => x / FW >= lo * .9 + .03 && x / FW < hi * .9 + .07);
-    const p = (pool.length ? pool : inside)[Math.floor(Math.random() * (pool.length || inside.length))];
-    drops.push({ x: p[0], y: p[1], t: 0, v: (.85 + Math.random() * .4) * LW * FS * .2, tone: .55 + Math.random() * .2 });
-  }
-  if (tickPts.length) { const p = tickPts[Math.floor(tickPts.length / 2)]; drops.push({ x: p[0], y: p[1], t: 0, v: LW * FS * .16, tone: .7, g: true }); }
-
-  /* ---------- the rain: blots all over the screen, then they rush into the word ---------- */
-  const startLayout = (() => { const total = LH + (narrow ? 26 : 34) + Math.ceil((narrow ? Math.min(26, w * .066) : Math.min(38, LW * .066)) * 1.5); const cy = h / 2 - total / 2 + LH / 2 - (narrow ? 10 : 6); return { cx: w / 2, cy }; })();
-  const toScreen = d => [startLayout.cx - LW / 2 - PAD + d.x / FS, startLayout.cy - LH / 2 - PAD + d.y / FS];
-  const NB = narrow ? 34 : 64;
-  const blots = [];
-  for (let i = 0; i < NB; i++) {
-    // keep blots off the word itself, so the word visibly forms out of them
-    let x, y, tries = 0;
-    do { x = w * (.04 + Math.random() * .92); y = h * (.06 + Math.random() * .88); tries++; }
-    while (tries < 20 && Math.abs(x - startLayout.cx) < LW * .62 && Math.abs(y - startLayout.cy) < LH * 1.1);
-    const feed = i < drops.length ? drops[i] : drops[Math.floor(Math.random() * drops.length)];
-    const land = T.rain[0] + (i / NB) * (T.rain[1] - T.rain[0] - .25) + Math.random() * .12;
-    const go = T.fly[0] + Math.random() * .3, dur = .5 + Math.random() * .25;
-    const r = (narrow ? 5 : 7) + Math.pow(Math.random(), 1.6) * (narrow ? 11 : 17);
-    const spl = Array.from({ length: 4 + (Math.random() * 4 | 0) }, () => ({ a: Math.random() * TAU, d: 1.15 + Math.random() * .7, r: .12 + Math.random() * .2 }));
-    const bend = (Math.random() - .5) * .9;
-    blots.push({ x, y, land, go, dur, r, spl, feed, bend, played: false, ph: Math.random() * TAU });
-  }
-  // each word drop starts spreading the moment its first blot arrives
-  for (const d of drops) {
-    const mine = blots.filter(b => b.feed === d);
-    d.t = mine.length ? Math.min(...mine.map(b => b.go + b.dur)) : T.fly[1];
-  }
-
-  // arrival time of the nearest two drops for every pixel (ragged by noise)
-  const nz = noise2(Math.random() * 1e9 | 0), sc = 7 / (LW * FS);
-  const a1 = new Float32Array(n), a2 = new Float32Array(n), t1 = new Float32Array(n), t2 = new Float32Array(n);
-  for (let y = 0; y < FH; y++) {
-    for (let x = 0; x < FW; x++) {
-      const i = y * FW + x;
-      const rag = .78 + nz(x * sc, y * sc) * .3 + nz(x * sc * 4.3, y * sc * 4.3) * .14;
-      // ink soaks in fast inside the letters, slowly into the bare paper around them
-      const inLetter = ink[i], slow = 1 + (1 - inLetter) * 2.2;
-      let b1 = 1e9, b2 = 1e9, s1 = .6, s2 = .6;
-      for (const d of drops) {
-        if (green[i] !== (d.g ? 1 : 0) && inLetter > .5) continue; // the tick fills from its own drop
-        const dist = Math.hypot(x - d.x, y - d.y);
-        const at = d.t + (dist / d.v) * rag * slow;
-        if (at < b1) { b2 = b1; s2 = s1; b1 = at; s1 = d.tone; } else if (at < b2) { b2 = at; s2 = d.tone; }
-      }
-      a1[i] = b1; a2[i] = b2; t1[i] = s1; t2[i] = s2;
-    }
-  }
-
-  const fc = document.createElement('canvas'); fc.width = FW; fc.height = FH;
-  const fx = fc.getContext('2d');
-  const img = fx.createImageData(FW, FH), px = img.data;
-  const EDGE = .09;
-  function shadeInk(c) {
-    const settle = smooth(T.settle[0], T.settle[1], c);
-    for (let i = 0; i < n; i++) {
-      const L = ink[i];
-      // coverage of the two nearest drops, each with a soft wet front
-      const c1 = smooth(a1[i] - EDGE, a1[i] + EDGE, c), c2 = smooth(a2[i] - EDGE, a2[i] + EDGE, c);
-      if (c1 <= 0) { px[i * 4 + 3] = 0; continue; }
-      // the wet rim: ink pools darker at the front while it is still moving
-      const rim1 = c1 * Math.exp(-Math.max(0, c - a1[i]) * 9) * .35, rim2 = c2 * Math.exp(-Math.max(0, c - a2[i]) * 9) * .35;
-      // overlap: two layers of translucent ink are darker than one
-      const l1 = clamp(c1 * t1[i] + rim1, 0, 1), l2 = clamp(c2 * t2[i] + rim2, 0, 1);
-      let al = 1 - (1 - l1) * (1 - l2);
-      // inside the letters the ink deepens to solid; outside it stays a faint, fading bleed
-      const halo = (near[i * 4 + 3] / 255) * .34 * (1 - settle);
-      al = L * mix(al, 1, settle) + (1 - L) * Math.min(al, halo);
-      const g = green[i];
-      px[i * 4] = g ? 78 : 26; px[i * 4 + 1] = g ? 171 : 29; px[i * 4 + 2] = g ? 71 : 31;
-      px[i * 4 + 3] = Math.round(clamp(al, 0, 1) * 255);
-    }
-    fx.putImageData(img, 0, 0);
-  }
-  const mix = (a, b, t) => a + (b - a) * t;
-
-  /* ---------- the tagline ---------- */
+  const spL = Math.max(3.2, LW / 120);
+  const word = sample(x => x.drawImage(logo, 0, 0, LW, LH), LW, LH, spL, (r, g, b, a) => {
+    if (a < 140) return 0;
+    if (g > r + 40) return 2;
+    return r < 110 && g < 110 && b < 110 ? 1 : 0;
+  });
+  /* ---------- the tagline, underneath ---------- */
   const line = 'The fingerprint of things.';
   const fs = narrow ? Math.min(26, w * .066) : Math.min(38, LW * .066);
-  const gap = narrow ? 26 : 34, TH = Math.ceil(fs * 1.5);
+  const meas = document.createElement('canvas').getContext('2d'); meas.font = `500 ${fs}px ${font}`;
+  const TW = Math.ceil(meas.measureText(line).width + fs * .4), TH = Math.ceil(fs * 1.5);
+  const spT = Math.max(1.9, fs / 16);
+  const tagPts = sample(x => { x.font = `500 ${fs}px ${font}`; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillStyle = '#000'; x.fillText(line, TW / 2, TH / 2); },
+    TW, TH, spT, (r, g, b, a) => a > 110 ? 1 : 0);
+
+  const gap = narrow ? 26 : 34;
   const layout = () => {
     const total = LH + gap + TH;
     const cy = h / 2 - total / 2 + LH / 2 - (narrow ? 10 : 6);
     return { cx: w / 2, cy, ty: cy + LH / 2 + gap + TH / 2 };
   };
-  const tc = document.createElement('canvas'), tx = tc.getContext('2d');
-  const onResize = () => { ({ w, h } = fit(canvas)); };
+
+  const mkDots = (pts, start, span) => pts.map(p => ({
+    p, sx: Math.random() * w, sy: Math.random() * h, ph: Math.random() * TAU, r0: .7 + Math.random() * 1.2,
+    // tick dots arrive last; the rest land in a loose left-to-right wave
+    t0: p.g ? start + span * .85 : start + span * clamp(((p.x / (pts === word ? LW : TW)) + .5) * .5 + Math.random() * .45, 0, 1) * .6,
+  }));
+  const wDots = mkDots(word, T.gather[0], T.gather[1] - T.gather[0]);
+  const tDots = mkDots(tagPts, T.tagline[0], T.tagline[1] - T.tagline[0] - .25);
+
+  /* ---------- the ink layer ---------- */
+  const PAD = Math.round(LW * .06);
+  const gcv = document.createElement('canvas');
+  gcv.className = 'intro-ink'; gcv.setAttribute('aria-hidden', 'true');
+  Object.assign(gcv.style, { width: LW + PAD * 2 + 'px', height: LH + PAD * 2 + 'px', opacity: '0' });
+  host.appendChild(gcv);
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  gcv.width = Math.round((LW + PAD * 2) * dpr); gcv.height = Math.round((LH + PAD * 2) * dpr);
+  let G = null;
+  try { G = inkGL(gcv); } catch { G = null; }
+  const FS = Math.max(narrow ? 1.6 : 2, Math.min(dpr, 3)); // field resolution per CSS px: matches the screen, up to 3×
+  const field = document.createElement('canvas');
+  field.width = Math.round((LW + PAD * 2) * FS); field.height = Math.round((LH + PAD * 2) * FS);
+  const fctx = field.getContext('2d');
+  const sprR = blobSprite('r'), sprG = blobSprite('g');
+  let fieldKey = '';
+  function paintField(dev) {
+    const k = dev.toFixed(3); if (k === fieldKey) return false; fieldKey = k;
+    fctx.globalCompositeOperation = 'source-over'; fctx.fillStyle = '#000'; fctx.fillRect(0, 0, field.width, field.height);
+    fctx.globalCompositeOperation = 'lighter';
+    // each dot spreads from a bead into a pool and runs into its neighbours
+    const grow = easeOut(dev), base = spL * mix(.32, .62, grow);
+    for (const d of wDots) {
+      const s = base * (.9 + (d.ph / TAU) * .2), R = s * 2.5 * FS;
+      const x = (d.p.x + LW / 2 + PAD) * FS, y = (d.p.y + LH / 2 + PAD) * FS;
+      fctx.globalAlpha = 1;
+      fctx.drawImage(d.p.g ? sprG : sprR, x - R, y - R, R * 2, R * 2);
+    }
+    fctx.globalAlpha = 1;
+    // a soft blur turns the bumpy bead edges into a liquid outline
+    if ('filter' in fctx) {
+      fctx.globalCompositeOperation = 'copy'; fctx.filter = `blur(${(1.4 * FS * grow).toFixed(2)}px)`;
+      fctx.drawImage(field, 0, 0); fctx.filter = 'none'; fctx.globalCompositeOperation = 'source-over';
+    }
+    return true;
+  }
+
+  /* ---------- the background specks ---------- */
+  let specks = [];
+  const seed = () => {
+    const n = clamp(Math.round(w * h / (narrow ? 230 : 170)), 500, 3200);
+    specks = Array.from({ length: n }, () => ({ x: Math.random() * w, y: Math.random() * h, vx: 0, vy: 0, r: .6 + Math.pow(Math.random(), 1.8) * 1.8 }));
+  };
+  seed();
+  const onResize = () => { ({ w, h } = fit(canvas)); seed(); };
   window.addEventListener('resize', onResize);
 
-  function drawTagline(cx, ty, c, d) {
-    const p = smooth(T.tagline[0], T.tagline[1], c);
-    if (p <= 0) return;
-    ctx.font = `500 ${fs}px ${font}`;
-    const tw = Math.ceil(ctx.measureText(line).width) + 20;
-    tc.width = Math.round(tw * d); tc.height = Math.round(TH * d);
-    tx.setTransform(d, 0, 0, d, 0, 0);
-    tx.font = `500 ${fs}px ${font}`; tx.textAlign = 'center'; tx.textBaseline = 'middle'; tx.fillStyle = '#50555a';
-    tx.fillText(line, tw / 2, TH / 2);
-    // ink runs along the line: a ragged front, with a darker wet edge
-    tx.globalCompositeOperation = 'destination-in';
-    const front = -30 + p * (tw + 60);
-    const g = tx.createLinearGradient(front - 40, 0, front + 6, 0);
-    g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0)');
-    tx.fillStyle = g; tx.fillRect(0, 0, tw, TH);
-    tx.globalCompositeOperation = 'source-over';
-    ctx.drawImage(tc, cx - tw / 2, ty - TH / 2, tw, TH);
+  function drawDot(x, y, r, col, a) {
+    ctx.globalAlpha = a; ctx.fillStyle = col;
+    ctx.beginPath(); ctx.arc(x, y, Math.max(.35, r), 0, TAU); ctx.fill();
   }
 
   function frame(now) {
@@ -206,70 +216,85 @@ export function startInkIntro({ canvas, logo, font, onReady, sound }) {
     const dt = debug ? 1 / 60 : Math.min(.05, Math.max(0, (now - last) / 1000)); last = now;
     clock += dt;
     if (debug) window.__introClock = clock;
+    // skipping fast-forwards to the finished frame
     const c = skipAt >= 0 ? Math.max(clock, T.open) : clock;
     const d = Math.min(window.devicePixelRatio || 1, 3);
     ctx.setTransform(d, 0, 0, d, 0, 0);
     ctx.clearRect(0, 0, w, h);
     const { cx, cy, ty } = layout();
 
-    // the rain: each drop falls (big and faint, then small and dark), lands with a splash and spreads;
-    // then the blots rush along a curve into the letters and are absorbed
-    ctx.fillStyle = '#1a1d1f';
-    for (const b of blots) {
-      if (c < b.land - .16) continue;
-      const [tx, ty] = toScreen(b.feed);
-      if (c < b.land) {
-        const u = (c - (b.land - .16)) / .16;
-        ctx.globalAlpha = .12 + u * .5; ctx.beginPath(); ctx.arc(b.x, b.y - (1 - u) * 26, b.r * .35 * (1 + (1 - u) * 2.2), 0, TAU); ctx.fill();
-        continue;
-      }
-      if (!b.played) { b.played = true; if (sound && skipAt < 0) sound.tap(.75 + (1 - b.r / 24) * .6 + Math.random() * .15, .6 + b.r / 40); }
-      const grow = 1 - Math.exp(-(c - b.land) * 7);
-      const fly = clamp((c - b.go) / b.dur, 0, 1), e = fly * fly * (3 - 2 * fly);
-      if (fly >= 1) continue;
-      const mx2 = (b.x + tx) / 2 + (ty - b.y) * b.bend, my2 = (b.y + ty) / 2 - (tx - b.x) * b.bend;
-      const at = q => [(1 - q) * (1 - q) * b.x + 2 * (1 - q) * q * mx2 + q * q * tx, (1 - q) * (1 - q) * b.y + 2 * (1 - q) * q * my2 + q * q * ty];
-      const [px2, py2] = at(e);
-      const R = b.r * (.35 + .65 * grow) * (1 - e * .7);
-      // a liquid trail while it travels
-      if (fly > 0) for (let k = 1; k <= 14; k++) {
-        const [qx, qy] = at(Math.max(0, e - k * .012));
-        ctx.globalAlpha = .5 * (1 - k / 15); ctx.beginPath(); ctx.arc(qx, qy, R * (1 - k * .055), 0, TAU); ctx.fill();
-      }
-      ctx.globalAlpha = .88;
-      ctx.beginPath(); ctx.arc(px2, py2, R, 0, TAU); ctx.fill();
-      // the splash around a blot that has just landed (it pulls in when the blot starts to move)
-      if (fly < .25) {
-        ctx.globalAlpha = .8 * (1 - fly * 4);
-        for (const sp of b.spl) {
-          const d = R * sp.d * (.6 + .4 * grow);
-          ctx.beginPath(); ctx.arc(px2 + Math.cos(sp.a) * d, py2 + Math.sin(sp.a) * d, Math.max(.6, R * sp.r), 0, TAU); ctx.fill();
-        }
+    // background specks: drift, and thin out as the shapes form
+    const thin = smooth(T.gather[0], T.develop[1], c);
+    ctx.globalAlpha = smooth(0, .5, c) * (1 - thin * .78);
+    ctx.fillStyle = 'rgb(26,29,31)'; ctx.beginPath();
+    for (const p of specks) {
+      const nx = Math.sin(p.y * .011 + c * .35) + Math.sin((p.x + p.y) * .006 - c * .2);
+      const ny = Math.cos(p.x * .009 - c * .3) + Math.cos((p.x - p.y) * .007 + c * .25);
+      p.vx += (nx * 13 - p.vx) * .04 + (Math.random() - .5) * 8; p.vy += (ny * 13 - p.vy) * .04 + (Math.random() - .5) * 8;
+      p.x += p.vx * dt; p.y += p.vy * dt;
+      if (p.x < -5) p.x = w + 5; if (p.x > w + 5) p.x = -5; if (p.y < -5) p.y = h + 5; if (p.y > h + 5) p.y = -5;
+      ctx.moveTo(p.x + p.r, p.y); ctx.arc(p.x, p.y, p.r, 0, TAU);
+    }
+    ctx.fill();
+
+    // develop: the dots hand over to the ink layer
+    const dev = G ? smooth(T.develop[0], T.develop[1], c) : 0;
+    const dotsAlpha = G ? 1 - smooth(T.develop[0], T.develop[0] + .35, c) : 1 - smooth(T.develop[1] - .2, T.develop[1] + .3, c);
+    // the crisp wordmark appears under the ink first, then the ink fades off it: no half-transparent grey moment
+    const sharp = smooth(T.develop[1] - .15, T.develop[1] + .05, c);
+    const inkOut = smooth(T.develop[1] + .05, T.develop[1] + .5, c);
+
+    // the wordmark's dots
+    if (dotsAlpha > 0) {
+      for (const p of wDots) {
+        const g = easeOut(smooth(p.t0, p.t0 + (p.p.g ? .45 : 1.0), c));
+        const swirl = (1 - g) * g * 60;
+        const x = mix(p.sx + Math.sin(c * .7 + p.ph) * 12, cx + p.p.x, g) + Math.cos(p.ph) * swirl;
+        const y = mix(p.sy + Math.cos(c * .6 + p.ph) * 12, cy + p.p.y, g) + Math.sin(p.ph) * swirl;
+        const green = p.p.g ? smooth(p.t0 + .3, p.t0 + .6, c) : 0;
+        const col = green > 0 ? `rgb(${mix(26, 78, green) | 0},${mix(29, 171, green) | 0},${mix(31, 71, green) | 0})` : '#1a1d1f';
+        drawDot(x, y, mix(p.r0, spL * .5, g), col, dotsAlpha);
       }
     }
-    ctx.globalAlpha = 1;
-    if (!zoomed && c >= T.fly[0] - .05) { zoomed = true; if (sound && skipAt < 0) sound.zoom(.8); }
-    if (!settled && c >= T.settle[0]) { settled = true; if (sound && skipAt < 0) sound.settle(); }
 
-    // the crisp wordmark comes up under the settled ink, then the ink lifts off it
-    const sharp = smooth(T.settle[1] - .25, T.settle[1], c);
-    const inkOut = smooth(T.settle[1], T.settle[1] + .35, c);
-    if (inkOut < 1 && c >= T.fly[0] + .3) {
-      shadeInk(c);
-      ctx.globalAlpha = 1 - inkOut;
-      ctx.imageSmoothingQuality = 'high';
-      ctx.drawImage(fc, cx - LW / 2 - PAD, cy - LH / 2 - PAD, LW + PAD * 2, LH + PAD * 2);
+    // the ink layer: the dots spread and run together into solid, flat ink (no tilt, no gloss)
+    if (G && dev > 0) {
+      paintField(dev);
+      G.draw(field, fieldKey !== gcv.dataset.k, { relief: 0, L: [0, 0, 1], tilt: [0, 0] });
+      gcv.dataset.k = fieldKey;
+      gcv.style.opacity = String(smooth(T.develop[0], T.develop[0] + .3, c) * (1 - inkOut));
+      gcv.style.transform = `translate(${cx - (LW / 2 + PAD)}px,${cy - (LH / 2 + PAD)}px)`;
     }
-    if (sharp > 0) { ctx.globalAlpha = sharp; ctx.drawImage(logo, cx - LW / 2, cy - LH / 2, LW, LH); }
-    ctx.globalAlpha = 1;
-    drawTagline(cx, ty, c, d);
+    // once set, the ink settles into the crisp wordmark: pin-sharp on any screen, up to 4K
+    if (sharp > 0) {
+      ctx.globalAlpha = sharp;
+      ctx.drawImage(logo, cx - LW / 2, cy - LH / 2, LW, LH);
+      ctx.globalAlpha = 1;
+    }
 
+    // the tagline's dots, then the crisp line
+    const crisp = smooth(T.tagline[1] - .3, T.tagline[1] + .2, c);
+    for (const p of tDots) {
+      const g = easeOut(smooth(p.t0, p.t0 + .8, c));
+      if (g <= 0 && c < T.tagline[0]) continue;
+      const x = mix(p.sx, cx + p.p.x, g), y = mix(p.sy, ty + p.p.y, g);
+      drawDot(x, y, mix(p.r0, spT * .5, g), '#50555a', (1 - crisp) * smooth(T.tagline[0], T.tagline[0] + .3, c));
+    }
+    if (crisp > 0) {
+      ctx.globalAlpha = crisp; ctx.fillStyle = '#50555a';
+      ctx.font = `500 ${fs}px ${font}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(line, cx, ty);
+    }
+    ctx.globalAlpha = 1;
+
+    // finished: compose one still frame (dots + ink) and hand it to the doors
     if (!handed && c >= T.open) {
       handed = true;
       const out = document.createElement('canvas'); out.width = canvas.width; out.height = canvas.height;
       const o = out.getContext('2d');
       o.fillStyle = '#fff'; o.fillRect(0, 0, out.width, out.height);
       o.drawImage(canvas, 0, 0);
+      if (G && inkOut < 1) o.drawImage(gcv, (cx - LW / 2 - PAD) * d, (cy - LH / 2 - PAD) * d, (LW + PAD * 2) * d, (LH + PAD * 2) * d);
       onReady(out);
     }
   }
@@ -277,6 +302,6 @@ export function startInkIntro({ canvas, logo, font, onReady, sound }) {
   raf = requestAnimationFrame(t => { last = t; frame(t); });
   return {
     skip() { if (skipAt < 0) skipAt = clock; },
-    destroy() { dead = true; cancelAnimationFrame(raf); window.removeEventListener('resize', onResize); },
+    destroy() { dead = true; cancelAnimationFrame(raf); window.removeEventListener('resize', onResize); if (G) G.release(); gcv.remove(); },
   };
 }
