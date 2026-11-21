@@ -20,7 +20,7 @@ function Check({ animated = false }: { animated?: boolean }) {
 
 // the phone camera's view of the product's Checko label (rendered at high resolution)
 function LabelPhoto({ product }: { product: Product }) {
-  return <img className="label-photo cam-shot" src={`/assets/${product.id.replace('v2-', 'v2-cam-')}.webp`} alt="" decoding="async" />;
+  return <img className="label-photo cam-shot" src={`/assets/${product.id.replace('v2c-', 'v2c-cam-')}.webp`} alt="" decoding="async" />;
 }
 
 export default function ScanDemo() {
