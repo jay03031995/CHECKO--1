@@ -596,3 +596,29 @@ html[data-intro=done] .site-shell { animation: site-in 1.3s cubic-bezier(.65, 0,
 }
 @keyframes phone-glare { 0%, 100% { background-position: 85% 0; } 50% { background-position: 15% 0; } }
 @media (prefers-reduced-motion: reduce) { .visual .phone { transform: none; animation: none; } .phone-glare { display: none; } }
+
+/* hero demo v2.2: the phone moves over the product and its camera sits on the label */
+.scan-real .visual-stage { overflow: hidden; }
+.scan-real .ps { position: absolute; pointer-events: none; transition: left 1s cubic-bezier(.65,0,.25,1), top 1s cubic-bezier(.65,0,.25,1), width 1s cubic-bezier(.65,0,.25,1), height 1s cubic-bezier(.65,0,.25,1), opacity .8s, filter .8s; }
+.scan-real .ps img { object-fit: contain; }
+.scan-real .ps-centre { left: 3%; top: 15cqw; width: 62%; height: 66cqw; z-index: 1; opacity: 1; }
+.scan-real .ps-centre[data-tall] { left: 10%; top: 10cqw; width: 48%; height: 76cqw; }
+.scan-real .ps-next { left: 77%; top: 62cqw; width: 21%; height: 22cqw; z-index: 0; opacity: .5; filter: blur(.6px); }
+.scan-real .ps-exit { left: -45%; top: 15cqw; width: 40%; height: 50cqw; opacity: 0; }
+.scan-real .ps-wait { left: 104%; top: 62cqw; width: 21%; height: 22cqw; opacity: 0; transition: none; }
+.scan-real .product-caption { top: 84cqw; left: 34%; }
+.scan-real .phone-pos { position: absolute; left: 0; top: 0; width: calc(38.7cqw * .55); height: calc(79cqw * .55); z-index: 3; will-change: transform; touch-action: auto; }
+.scan-real .phone-pos.can-drag { cursor: grab; touch-action: none; }
+.scan-real .phone-pos.dragging { cursor: grabbing; }
+.scan-real .phone { position: relative; right: auto; top: auto; transform-origin: 0 0;
+  transform: scale(.55) rotateY(var(--ry, 0deg)) rotateX(var(--rx, 0deg)); }
+.scan-real .phone-pos.dragging .phone { box-shadow: inset 0 0 0 2px #55595a, 2px 4px 0 #353738, 2cqw 9cqw 9cqw -3cqw #1a1d1f55; }
+.scan-real.auto-turn .phone { animation: phone-turn-s 6s ease-in-out infinite; }
+@keyframes phone-turn-s { 0%, 100% { transform: scale(.55) rotateY(-9deg) rotateX(2deg); } 50% { transform: scale(.55) rotateY(9deg) rotateX(-2deg); } }
+.scan-real .genuine-chip { top: -6cqw; left: 10.6cqw; }
+.camera .cam-live { position: absolute; left: 0; top: 0; max-width: none; transform-origin: 0 0; will-change: transform; }
+.camera .cam-lock { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .5s; }
+.camera .cam-lock.on { opacity: 1; }
+.hc-hint { margin: 10px 0 0; text-align: center; font-size: 12.5px; color: var(--mute); transition: opacity .6s; }
+.hc-hint.gone { opacity: 0; }
+@media (prefers-reduced-motion: reduce) { .scan-real .phone { transform: scale(.55); animation: none; } }
