@@ -35,6 +35,38 @@ export default function ScanDemo() {
   // the controller: jump to a product (starts its scan from the beginning)
   const goTo = (i: number) => { const n = products.length; setIndex(((i % n) + n) % n); setPhase(0); };
 
+  // the phone in 3D: follows the cursor on desktop, turns by itself on touch screens
+  const [autoTurn, setAutoTurn] = useState(false);
+  useEffect(() => {
+    const el = root.current;
+    if (!el || reduced) return;
+    const fine = matchMedia('(hover: hover) and (pointer: fine)').matches;
+    if (!fine) { setAutoTurn(true); return; }
+    let tx = 0, ty = 0, x = 0, y = 0, raf = 0, last = performance.now(), idle = true;
+    const onMove = (e: PointerEvent) => {
+      const r = el.getBoundingClientRect();
+      const nx = (e.clientX - (r.left + r.width * 0.5)) / (r.width * 0.6), ny = (e.clientY - (r.top + r.height * 0.45)) / (r.height * 0.6);
+      tx = Math.max(-1, Math.min(1, nx)); ty = Math.max(-1, Math.min(1, ny)); idle = false;
+    };
+    const onLeave = () => { idle = true; };
+    const loop = (now: number) => {
+      const dt = Math.min(0.05, (now - last) / 1000); last = now;
+      // with no cursor nearby the phone keeps a slow, gentle sway so it never looks frozen
+      const gx = idle ? Math.sin(now / 1600) * 0.35 : tx, gy = idle ? Math.cos(now / 2100) * 0.15 : ty;
+      const k = 1 - Math.exp(-dt * 6);
+      x += (gx - x) * k; y += (gy - y) * k;
+      el.style.setProperty('--ry', `${(x * 24).toFixed(2)}deg`);
+      el.style.setProperty('--rx', `${(-y * 12).toFixed(2)}deg`);
+      el.style.setProperty('--gp', `${(50 - x * 35).toFixed(1)}%`);
+      el.style.setProperty('--sx', x.toFixed(3));
+      raf = requestAnimationFrame(loop);
+    };
+    window.addEventListener('pointermove', onMove, { passive: true });
+    document.documentElement.addEventListener('pointerleave', onLeave);
+    raf = requestAnimationFrame(loop);
+    return () => { cancelAnimationFrame(raf); window.removeEventListener('pointermove', onMove); document.documentElement.removeEventListener('pointerleave', onLeave); };
+  }, [reduced]);
+
   // only animate while the demo is on screen
   useEffect(() => {
     const el = root.current;
@@ -74,7 +106,7 @@ export default function ScanDemo() {
 
   return (
     <LazyMotion features={domAnimation} strict>
-      <div ref={root} className="visual" role="img"
+      <div ref={root} className={`visual${autoTurn ? ' auto-turn' : ''}`} role="img"
         aria-label={`Demonstration: a phone scans the Checko label on ${product.name} and shows that the product is genuine.`}>
         <div className="visual-glow" aria-hidden="true" />
         <div className="visual-stage" aria-hidden="true">
@@ -105,6 +137,7 @@ export default function ScanDemo() {
           </AnimatePresence>
           <div className="phone">
             <div className="phone-side" />
+            <i className="phone-glare" />
             <div className="screen">
               <div className="status"><span>9:41</span><span className="island" /><span className="bars"><i /><i /><i /></span></div>
               <div className="app-brand">
