@@ -64,16 +64,22 @@ export const solutions = [
 ] as const;
 
 // img: public/assets/industries/<img>.webp (AI-generated studio shots, unbranded). Copy from the concept file.
-export const industries = [
-  { img: 'lub', name: 'Lubricants', who: 'Drivers and mechanics', risk: 'Fake oil wrecks engines.', fit: 'Authenticate every can, and reward the mechanics who recommend the real thing.' },
-  { img: 'agro', name: 'Agrochemicals & seeds', who: 'Farmers', risk: 'Fake inputs destroy crops and incomes.', fit: 'Farmer-friendly scans in local languages, with rewards for buying genuine.' },
-  { img: 'auto', name: 'Automotive spares', who: 'Drivers and fleets', risk: 'Counterfeit spares put drivers at risk.', fit: 'Verification for mechanics and fleets, plus tracing from plant to workshop.' },
-  { img: 'elec', name: 'Electricals & building', who: 'Families at home', risk: 'Fake wires and switches cause fires.', fit: 'Authentication and digital warranty registration in a single scan.' },
-  { img: 'pharma', name: 'Pharma & healthcare', who: 'Patients', risk: 'Fake medicines harm patients.', fit: 'Unit-level authentication, checkable at the pharmacy counter.' },
-  { img: 'fmcg', name: 'FMCG', who: 'Everyday shoppers', risk: 'High-volume fakes slip onto shelves.', fit: 'Scan-to-verify with loyalty rewards that bring shoppers back.' },
-  { img: 'apparel', name: 'Apparel & textiles', who: 'Shoppers', risk: 'Fake brand tags pass for the real thing.', fit: 'Woven-in or swing-tag labels that shoppers check in seconds.' },
-  { img: 'ecom', name: 'E-commerce', who: 'Online buyers', risk: 'Parcels get opened and swapped on the way.', fit: 'Tamper-evident security tape and labels for every parcel.' },
-  { img: 'docs', name: 'Documents', who: 'Students and institutions', risk: 'Certificates get forged.', fit: 'Tamper-proof seals that anyone can verify.' },
+export const useCases = {
+  auth: 'Authentication', trace: 'Track and trace', geo: 'Geo-fencing', loyalty: 'Secure loyalty', warranty: 'Warranty registration', engage: 'Customer engagement',
+} as const;
+export type UseCase = keyof typeof useCases;
+
+// copy from the concept sheet; use cases are the team's draft (only the ones that apply are shown)
+export const industries: { img: string; name: string; who: string; risk: string; fit: string; uses: UseCase[] }[] = [
+  { img: 'lub', name: 'Lubricants', who: 'Drivers and mechanics', risk: 'Fake oil wrecks engines.', fit: 'Authenticate every can, and reward the mechanics who recommend the real thing.', uses: ['auth', 'trace', 'geo', 'loyalty', 'engage'] },
+  { img: 'agro', name: 'Agrochemicals & seeds', who: 'Farmers', risk: 'Fake inputs destroy crops and farmer incomes.', fit: 'Farmer-friendly scans in local languages, with rewards for buying genuine.', uses: ['auth', 'trace', 'geo', 'loyalty', 'engage'] },
+  { img: 'auto', name: 'Automotive spares', who: 'Drivers and fleets', risk: 'Counterfeit spares put drivers at risk.', fit: 'Verification for mechanics and fleets, plus traceability from plant to workshop.', uses: ['auth', 'trace', 'loyalty', 'warranty', 'engage'] },
+  { img: 'elec', name: 'Electricals & building', who: 'Families at home', risk: 'Fake wires and switches cause fires.', fit: 'Authentication and digital warranty registration in a single scan.', uses: ['auth', 'loyalty', 'warranty', 'engage'] },
+  { img: 'pharma', name: 'Pharma & healthcare', who: 'Patients', risk: 'Fake medicines harm patients.', fit: 'Unit-level authentication and traceability, checkable at the pharmacy counter.', uses: ['auth', 'trace', 'geo', 'engage'] },
+  { img: 'fmcg', name: 'FMCG', who: 'Everyday shoppers', risk: 'High-volume fakes slip onto shop shelves.', fit: 'Scan-to-verify with loyalty rewards that bring shoppers back to the real brand.', uses: ['auth', 'trace', 'geo', 'loyalty', 'engage'] },
+  { img: 'apparel', name: 'Apparel & textiles', who: 'Shoppers', risk: 'Fake brand tags pass for the real thing.', fit: 'Woven-in or swing-tag labels that shoppers can check in seconds.', uses: ['auth', 'engage'] },
+  { img: 'ecom', name: 'E-commerce', who: 'Online buyers', risk: 'Deliveries get opened and swapped on the way.', fit: 'Tamper-evident security tape and labels for every parcel.', uses: ['auth', 'trace'] },
+  { img: 'docs', name: 'Documents', who: 'Students and institutions', risk: 'Certificates and official papers get forged.', fit: 'Tamper-proof seals that anyone can verify.', uses: ['auth'] },
 ];
 
 // Figures retained from the supplied concept. Confirm with the Checko team before launch.
