@@ -102,7 +102,7 @@ export default function Industries() {
               {industries.map((it, i) => (
                 <button key={it.img} type="button" role="listitem" className={`ib-item${i === cur ? ' on' : ''}`}
                   onClick={() => go(i)} aria-label={`${it.name}: ${it.risk}`} aria-current={i === cur}>
-                  <Image src={`/assets/industries-c/${it.img}.webp`} alt="" width={1024} height={1024} sizes="(max-width: 700px) 46vw, 300px" quality={90} />
+                  <Image src={`/assets/industries-k/${it.img}.webp`} alt="" width={1024} height={1024} sizes="(max-width: 700px) 46vw, 300px" quality={90} />
                 </button>
               ))}
             </div>

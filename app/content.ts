@@ -21,12 +21,12 @@ export type Product = { id: string; name: string; category: string; aspect: numb
 // tag: the Checko label's box inside each photo (x, y, w, h as fractions), used to frame the phone camera on it
 // v2: unbranded products (from the Industries set), each wearing a Checko label
 export const products: Product[] = [
-  { id: 'v2c-lub', name: 'Engine oil', category: 'Lubricants', aspect: 0.5389, tag: [0.2819, 0.3434, 0.2236, 0.1004] as [number, number, number, number] },
-  { id: 'v2c-shoes', name: 'Leather shoes', category: 'Footwear', aspect: 1.6565, tag: [0.7891, 0.4367, 0.1236, 0.1706] as [number, number, number, number] },
-  { id: 'v2c-apparel', name: 'Formal shirt', category: 'Clothing', aspect: 0.9855, tag: [0.4991, 0.4347, 0.1591, 0.1307] as [number, number, number, number] },
-  { id: 'v2c-pharma', name: 'Tablets', category: 'Medicines', aspect: 1.1427, tag: [0.1603, 0.2016, 0.1602, 0.1525] as [number, number, number, number] },
-  { id: 'v2c-elec', name: 'Cable and switch', category: 'Electricals', aspect: 1.4116, tag: [0.1326, 0.4659, 0.1516, 0.1784] as [number, number, number, number] },
-  { id: 'v2c-metal', name: 'Steel strip coil', category: 'Metal strips', aspect: 1.0346, tag: [0.4068, 0.2905, 0.1217, 0.1049] as [number, number, number, number] },
+  { id: 'v2k-lub', name: 'Engine oil', category: 'Lubricants', aspect: 0.5389, tag: [0.2819, 0.3434, 0.2236, 0.1004] as [number, number, number, number] },
+  { id: 'v2k-shoes', name: 'Leather shoes', category: 'Footwear', aspect: 1.6565, tag: [0.7891, 0.4367, 0.1236, 0.1706] as [number, number, number, number] },
+  { id: 'v2k-apparel', name: 'Formal shirt', category: 'Clothing', aspect: 0.9855, tag: [0.4991, 0.4347, 0.1591, 0.1307] as [number, number, number, number] },
+  { id: 'v2k-pharma', name: 'Tablets', category: 'Medicines', aspect: 1.1427, tag: [0.1603, 0.2016, 0.1602, 0.1525] as [number, number, number, number] },
+  { id: 'v2k-elec', name: 'Cable and switch', category: 'Electricals', aspect: 1.4116, tag: [0.1326, 0.4659, 0.1516, 0.1784] as [number, number, number, number] },
+  { id: 'v2k-metal', name: 'Steel strip coil', category: 'Metal strips', aspect: 1.0346, tag: [0.4068, 0.2905, 0.1217, 0.1049] as [number, number, number, number] },
 ];
 
 

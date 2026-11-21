@@ -245,7 +245,7 @@ export default function ScanDemo() {
                   {/* live view: whatever is under the camera, magnified */}
                   <img ref={live} className="cam-live" src={`/assets/${product.id}.webp`} alt="" decoding="async" />
                   {/* locked on the label: the sharp close-up */}
-                  <img className={`cam-lock${locked ? ' on' : ''}`} src={`/assets/${product.id.replace('v2c-', 'v2c-cam-')}.webp`} alt="" decoding="async" />
+                  <img className={`cam-lock${locked ? ' on' : ''}`} src={`/assets/${product.id.replace('v2k-', 'v2k-cam-')}.webp`} alt="" decoding="async" />
                   <div className={`focus-frame${verified ? ' success' : ''}`}><i /><i /><i /><i />{scanning && <div className="scan-line" />}</div>
                   {verified && <span className="camera-badge">3D PATTERN MATCHED</span>}
                 </div>

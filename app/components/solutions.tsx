@@ -12,7 +12,7 @@ import { solutions, v2Products } from '../content';
  * On very short screens (under 620px tall) it stays a normal accordion.
  */
 
-const PR = { src: '/assets/v2c-elec.webp', aspect: v2Products.elec.aspect, tag: v2Products.elec.tag };
+const PR = { src: '/assets/v2k-elec.webp', aspect: v2Products.elec.aspect, tag: v2Products.elec.tag };
 const STN: [string, string, number, number][] = [['Plant', 'Packed', 0.1, 0.74], ['Distributor', 'Received', 0.37, 0.5], ['Wholesaler', 'Received', 0.63, 0.7], ['Electrician', 'Installed', 0.9, 0.42]];
 const CARDS: [Icon, string, string, string?][] = [['warranty', 'Warranty registered', '2-year cover active'], ['video', 'Installation guide', 'Watched in full'], ['ar', 'Seen in AR', 'Before buying more'], ['offer', 'MCB offer opened', 'Cross-sell', 'Saved']];
 // Insights: weekly scans (genuine) and the regions they came from; one region is flagged
