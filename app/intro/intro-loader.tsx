@@ -1,14 +1,14 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { startInkIntro } from './ink-engine';
+import { startTopoIntro } from './topo-engine';
 
 export const INTRO_EVENT = 'checko:intro-done';
 
 /**
  * Full-screen intro, played once per browser session (the inline script in layout.tsx decides before first paint,
- * so the hero never flashes underneath). Dots form the checko wordmark, develop into raised ink, the tagline gathers
- * underneath, and the finished screen opens like a pair of doors onto the site.
+ * so the hero never flashes underneath). Topographic contour lines flow, gather into rings around the checko
+ * wordmark, the letters fill in, and the finished screen opens like a pair of doors onto the site.
  */
 export default function IntroLoader() {
   const [phase, setPhase] = useState<'run' | 'doors' | 'open' | 'gone'>('run');
@@ -67,7 +67,7 @@ export default function IntroLoader() {
       : Promise.resolve();
     Promise.all([logo.decode().catch(() => undefined), fonts]).then(() => {
       if (cancelled || !canvas.current) return;
-      try { engine.current = startInkIntro({ canvas: canvas.current, logo, font, onReady: openDoors }); }
+      try { engine.current = startTopoIntro({ canvas: canvas.current, logo, font, onReady: openDoors }); }
       catch { openDoors(null); }
     });
     const debug = /intro=debug/.test(location.search);
